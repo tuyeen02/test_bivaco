@@ -1,0 +1,36 @@
+Bài 1
+### Ghi chú: ### 
+Điều kiện cụ thể:
+là NPP tên A cần đạt 5 triệu trên tháng, các con của A là A1, A2, A3, ..., cần có 2 thằng con (ví dụ: A1, A3) đạt ≥ 250 triệu trong vòng 3 tháng sẽ đc nhận danh hiệu đồng chia
+Điều kiện thêm:
+Nếu 1 NPP (thằng cha) đạt đến mức 5 tháng ko đạt thì sẽ bị mất danh hiệu còn nếu đã đạt danh hiệu thì có 1 tháng ko đạt vẫn nhận đồng chia chỉ đến khi vượt quá 5 tháng thì sẽ mất và sẽ cần tích chuỗi 3 tháng đạt mới đc nhận lại
+Cách chia:
+Chia cho tất cả các nhánh đạt đủ chỉ tiêu là tổng các nhánh cả bố cả con (Ví dụ A, A1, A3 đạt thì chia 3 của 1% doanh số đó)
+
+### Command ###
+C:\wamp64\bin\php\php7.4.33\php.exe calculate_bonus.php --month=2025-09
+php7.4.33
+
+
+
+Bài 3 
+Trên mỗi website, hoặc thậm chí mỗi trang trong cùng một website, nội dung chính có thể được đặt trong các thẻ khác nhau (div, article, section,...) với class hoặc id hoàn toàn khác nhau.
+Ví dụ:
+Trang A: nội dung nằm trong <div class="content-main">
+Trang B: nội dung lại nằm trong <article id="main-article">
+Trang C: nội dung chính lại là <section class="body-text">
+
+### Giải pháp hiện tại: ### 
+Lấy toàn bộ HTML (toàn bộ body)
+Xóa đi các phần không cần thiết:
+<header>, <footer>, <nav>, <aside>, v.v.
+Có thể lọc tiếp các thẻ không liên quan như:
+script, style, noscript, form, input, button, v.v.
+Sau đó, giữ lại phần có vẻ là nội dung chính.
+
+
+### 
+Nếu muốn lấy nội dung trong 1 website cụ thể có thể tùy chỉnh lấy nội dung theo website (website đó đặt nội dung trong thẻ nào)
+
+
+Code hiện tại đang lấy theo link https://vnexpress.net/10-truyen-cuoi-hot-nhat-ngay-quoc-te-thieu-nhi-1-6-3757206.html
