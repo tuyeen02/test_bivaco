@@ -176,7 +176,20 @@ function renderUserAllMonths($pdo, $userId, $periods, $level = 0) {
     foreach ($periods as $p) {
         $sales = getPersonalSales($pdo, $userId, $p);
         $totals += $sales;
-        echo "<td align='center'>" . number_format($sales) . "</td>";
+        if($level == 0){
+            if($sales >=5000000){
+                echo "<td align='center' style='color: green'>" . number_format($sales) . "</td>";
+            }else{
+                echo "<td align='center' style='color: red'>" . number_format($sales) . "</td>";
+            }
+            
+        }else{
+            if($sales >= 250000000){
+                echo "<td align='center' style='color: green'>" . number_format($sales) . "</td>";
+            }else{
+                echo "<td align='center' style='color: red'>" . number_format($sales) . "</td>";
+            }
+        }
     }
     
     echo "<td align='center'><b>" . number_format($totals) . "</b></td>";
