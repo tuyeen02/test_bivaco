@@ -2,39 +2,74 @@
 require 'db.php';
 
 // --------- Lấy tham số tháng ----------
+// $month dạng "YYYY-MM"
 $options = getopt("", ["month:"]); 
 $month = $options['month'] ?? date('Y-m');
 
-// --------- Tính tổng doanh thu ----------
-$stmt = $pdo->prepare("
-    SELECT SUM(amount) FROM orders
-    WHERE DATE_FORMAT(order_date, '%Y-%m') = ?
-");
-$stmt->execute([$month]);
-$total_sales = $stmt->fetchColumn() ?: 0;
-$fund = $total_sales * 0.01;
-
-// --------- Lấy toàn bộ NPP ----------
+// Lấy toàn bộ NPP
 $users = $pdo->query("SELECT id, name FROM users")->fetchAll(PDO::FETCH_ASSOC);
+
+// Khởi tạo trạng thái danh hiệu từ database
+$bonusStatus = [];
+foreach ($users as $u) {
+    $stmt = $pdo->prepare("SELECT has_title, fail_months FROM bonus_status WHERE user_id = ?");
+    $stmt->execute([$u['id']]);
+    $status = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['has_title'=>0, 'fail_months'=>0];
+    $bonusStatus[$u['id']] = $status;
+}
+
+// Tổng doanh thu & quỹ thưởng tháng được chọn
+$stmt = $pdo->prepare("SELECT SUM(amount) FROM orders WHERE DATE_FORMAT(order_date, '%Y-%m') = ?");
+$stmt->execute([$month]);
+$total_sales = (float)$stmt->fetchColumn();
+$fund = $total_sales * 0.01;
 
 $qualified = [];
 
-// --------- Kiểm tra điều kiện ----------
+// --------- Kiểm tra điều kiện tháng $month ----------
 foreach ($users as $user) {
     $userId = $user['id'];
+    $status = $bonusStatus[$userId];
 
-    if (checkPersonalSales($pdo, $userId, $month) && checkBranches($pdo, $userId, $month)) {
-        $qualified[] = $user;
+    // Kiểm tra tháng hiện tại
+    $achieveCurrent = checkPersonalSales($pdo, $userId, $month) && checkBranches($pdo, $userId, $month);
+
+    if ($status['has_title']) {
+        // Đã có danh hiệu
+        if ($achieveCurrent) {
+            // Tháng đạt → vẫn nhận thưởng, fail_months giữ nguyên
+            $bonusStatus[$userId]['has_title'] = 1;
+            $qualified[] = $user;
+        } else {
+            // Tháng không đạt → tăng fail_months
+            $bonusStatus[$userId]['fail_months']++;
+            if ($bonusStatus[$userId]['fail_months'] >= 5) {
+                // Mất danh hiệu
+                $bonusStatus[$userId]['has_title'] = 0;
+            } else {
+                // vẫn giữ danh hiệu nhưng tháng này không thưởng
+            }
+        }
+    } else {
+        // Chưa có danh hiệu → kiểm tra chuỗi 3 tháng liên tiếp
+        $achieve3 = checkLast3Months($pdo, $userId, $month);
+        if ($achieve3) {
+            $bonusStatus[$userId] = ['has_title'=>1, 'fail_months'=>0];
+            $qualified[] = $user;
+        }
     }
 }
 
+// Tính thưởng
+$bonusEach = count($qualified) > 0 ? $fund / count($qualified) : 0;
+
 // --------- In kết quả ----------
-echo "Tổng doanh thu tháng $month: " . number_format($total_sales) . "\n";
-echo "Quỹ thưởng (1%): " . number_format($fund) . "\n\n";
+echo "Tháng $month\n";
+echo "Tổng doanh thu: " . number_format($total_sales) . " VND\n";
+echo "Quỹ thưởng 1%: " . number_format($fund) . " VND\n\n";
 
 if (count($qualified) > 0) {
-    $bonusEach = $fund / count($qualified);
-    echo "Danh sách NPP đủ điều kiện:\n";
+    echo "NPP nhận thưởng:\n";
     foreach ($qualified as $user) {
         echo "- {$user['name']} (ID {$user['id']}): " . number_format($bonusEach) . " VND\n";
     }
@@ -43,74 +78,67 @@ if (count($qualified) > 0) {
 }
 
 // ----------------- HÀM HỖ TRỢ -----------------
-
-// Kiểm tra DS cá nhân ≥ 5tr trong 3 tháng liên tiếp
 function checkPersonalSales($pdo, $userId, $month) {
     $months = getLast3Months($month);
     foreach ($months as $m) {
-        $stmt = $pdo->prepare("
-            SELECT SUM(amount) FROM orders
-            WHERE user_id = ? AND DATE_FORMAT(order_date, '%Y-%m') = ?
-        ");
-        $stmt->execute([$userId, $m]);
-        $sales = $stmt->fetchColumn() ?: 0;
-        if ($sales < 5000000) return false;
+        $stmt = $pdo->prepare("SELECT SUM(amount) FROM orders WHERE user_id=? AND DATE_FORMAT(order_date, '%Y-%m')=?");
+        $stmt->execute([$userId,$m]);
+        if ((float)$stmt->fetchColumn() < 5000000) return false;
     }
     return true;
 }
 
-// Kiểm tra xem NPP có ít nhất 2 chi nhánh đạt doanh số tối thiểu 3 tháng không
 function checkBranches($pdo, $userId, $month) {
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE parent_id = ?");
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE parent_id=?");
     $stmt->execute([$userId]);
     $children = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-    if (count($children) < 2) return false;
+    if(count($children)<2) return false;
 
-    $okCount = 0;
-    foreach ($children as $childId) {
-        $months = getLast3Months($month);
-        $ok = true;
-        foreach ($months as $m) {
-            $sales = getBranchSales($pdo, $childId, $m);
-            if ($sales < 250000000) { // 250 triệu
-                $ok = false;
+    $months = getLast3Months($month);
+    $okCount=0;
+    foreach($children as $childId){
+        $ok=true;
+        foreach($months as $m){
+            if(getBranchSales($pdo,$childId,$m)<250000000){
+                $ok=false;
                 break;
             }
         }
-        if ($ok) $okCount++;
+        if($ok) $okCount++;
     }
-    return $okCount >= 2;
+    return $okCount>=2;
 }
 
-// Tính doanh số của nhánh (bao gồm con cháu)
-function getBranchSales($pdo, $userId, $month) {
-    // lấy danh sách user con trực tiếp
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE parent_id = ?");
+function getBranchSales($pdo,$userId,$month){
+    $stmt=$pdo->prepare("SELECT id FROM users WHERE parent_id=?");
     $stmt->execute([$userId]);
-    $children = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    $children=$stmt->fetchAll(PDO::FETCH_COLUMN);
 
-    // doanh số cá nhân của node hiện tại
-    $stmt = $pdo->prepare("SELECT SUM(amount) FROM orders WHERE user_id = ? AND DATE_FORMAT(order_date, '%Y-%m') = ?");
-    $stmt->execute([$userId, $month]);
-    $sales = (int)$stmt->fetchColumn();
+    $stmt=$pdo->prepare("SELECT SUM(amount) FROM orders WHERE user_id=? AND DATE_FORMAT(order_date,'%Y-%m')=?");
+    $stmt->execute([$userId,$month]);
+    $sales=(float)$stmt->fetchColumn();
 
-    // cộng thêm doanh số của con cháu
-    foreach ($children as $childId) {
-        $sales += getBranchSales($pdo, $childId, $month);
+    foreach($children as $c){
+        $sales+=getBranchSales($pdo,$c,$month);
     }
-
     return $sales;
 }
 
-
-// Lấy 3 tháng liên tiếp: T, T-1, T-2
-function getLast3Months($month) {
-    $months = [];
-    $date = DateTime::createFromFormat('Y-m', $month);
-    for ($i = 0; $i < 3; $i++) {
-        $months[] = $date->format('Y-m');
+function getLast3Months($month){
+    $months=[];
+    $date=DateTime::createFromFormat('Y-m',$month);
+    for($i=0;$i<3;$i++){
+        $months[]=$date->format('Y-m');
         $date->modify('-1 month');
     }
     return $months;
+}
+
+function checkLast3Months($pdo,$userId,$month){
+    $months=getLast3Months($month);
+    foreach($months as $m){
+        if(!(checkPersonalSales($pdo,$userId,$m) && checkBranches($pdo,$userId,$m))) return false;
+    }
+    return true;
 }
