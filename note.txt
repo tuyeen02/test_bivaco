@@ -8,8 +8,7 @@ Cách chia:
 Chia cho tất cả các nhánh đạt đủ chỉ tiêu là tổng các nhánh cả bố cả con (Ví dụ A, A1, A3 đạt thì chia 3 của 1% doanh số đó)
 
 ### Command ###
-C:\wamp64\bin\php\php7.4.33\php.exe calculate_bonus.php --month=2025-09
-php7.4.33
+php calculate_bonus.php --month=2025-09
 
 
 
